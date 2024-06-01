@@ -31,7 +31,9 @@ extern "C" {
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+extern float tCelsius;
+extern float tFahrenheit;
+extern float RH;
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/

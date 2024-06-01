@@ -18,15 +18,19 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "cmsis_os.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "dht11.h"
 #include <string.h>
 #include <stdio.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+  uint8_t RHI, RHD, TCI, TCD, SUM;
+  uint8_t dataToSend[5];
 
 /* USER CODE END PTD */
 
@@ -37,7 +41,8 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define QUEUE_SIZE 10
+ uint8_t QueueBuffer[QUEUE_SIZE * sizeof(uint32_t)];
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -45,7 +50,23 @@ TIM_HandleTypeDef htim1;
 
 UART_HandleTypeDef huart2;
 
+/* Definitions for TaskDHT11 */
+osThreadId_t TaskDHT11Handle;
+const osThreadAttr_t TaskDHT11_attributes = {
+  .name = "TaskDHT11",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+/* Definitions for Task02 */
+osThreadId_t Task02Handle;
+const osThreadAttr_t Task02_attributes = {
+  .name = "Task02",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
 /* USER CODE BEGIN PV */
+
+/* HC-SR04 ---------------------------------------------------------*/
 
 /* USER CODE END PV */
 
@@ -54,82 +75,18 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
+void StartTaskDHT11(void *argument);
+void StartTask2(void *argument);
+
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-#define DHT11_PORT GPIOA
-#define DHT11_PIN GPIO_PIN_5
-uint8_t RHI, RHD, TCI, TCD, SUM;
-uint32_t pMillis, cMillis;
-float tCelsius = 0;
-float tFahrenheit = 0;
-float RH = 0;
 
 
-void microDelay (uint16_t delay)
-{
-  __HAL_TIM_SET_COUNTER(&htim1, 0);
-  while (__HAL_TIM_GET_COUNTER(&htim1) < delay);
-}
 
-uint8_t DHT11_Start (void)
-{
-  uint8_t Response = 0;
-  GPIO_InitTypeDef GPIO_InitStructPrivate = {0};
-  GPIO_InitStructPrivate.Pin = DHT11_PIN;
-  GPIO_InitStructPrivate.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStructPrivate.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStructPrivate.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(DHT11_PORT, &GPIO_InitStructPrivate); // set the pin as output
-  HAL_GPIO_WritePin (DHT11_PORT, DHT11_PIN, 0);   // pull the pin low
-  HAL_Delay(20);   // wait for 20ms
-  HAL_GPIO_WritePin (DHT11_PORT, DHT11_PIN, 1);   // pull the pin high
-  microDelay (30);   // wait for 30us
-  GPIO_InitStructPrivate.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStructPrivate.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(DHT11_PORT, &GPIO_InitStructPrivate); // set the pin as input
-  microDelay (40);
-  if (!(HAL_GPIO_ReadPin (DHT11_PORT, DHT11_PIN)))
-  {
-    microDelay (80);
-    if ((HAL_GPIO_ReadPin (DHT11_PORT, DHT11_PIN))) Response = 1;
-  }
-  pMillis = HAL_GetTick();
-  cMillis = HAL_GetTick();
-  while ((HAL_GPIO_ReadPin (DHT11_PORT, DHT11_PIN)) && pMillis + 2 > cMillis)
-  {
-    cMillis = HAL_GetTick();
-  }
-  return Response;
-}
-
-uint8_t DHT11_Read (void) {
-	uint8_t a,b;
-	  for (a=0;a<8;a++)
-	  {
-	    pMillis = HAL_GetTick();
-	    cMillis = HAL_GetTick();
-	    while (!(HAL_GPIO_ReadPin (DHT11_PORT, DHT11_PIN)) && pMillis + 2 > cMillis)
-	    {  // wait for the pin to go high
-	      cMillis = HAL_GetTick();
-	    }
-	    microDelay (40);   // wait for 40 us
-	    if (!(HAL_GPIO_ReadPin (DHT11_PORT, DHT11_PIN)))   // if the pin is low
-	      b&= ~(1<<(7-a));
-	    else
-	      b|= (1<<(7-a));
-	    pMillis = HAL_GetTick();
-	    cMillis = HAL_GetTick();
-	    while ((HAL_GPIO_ReadPin (DHT11_PORT, DHT11_PIN)) && pMillis + 2 > cMillis)
-	    {  // wait for the pin to go low
-	      cMillis = HAL_GetTick();
-	    }
-	  }
-	  return b;
-}
 /* USER CODE END 0 */
 
 /**
@@ -166,44 +123,48 @@ int main(void)
   HAL_TIM_Base_Start(&htim1);
   /* USER CODE END 2 */
 
+  /* Init scheduler */
+  osKernelInitialize();
+
+  /* USER CODE BEGIN RTOS_MUTEX */
+  /* add mutexes, ... */
+  /* USER CODE END RTOS_MUTEX */
+
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* add semaphores, ... */
+  /* USER CODE END RTOS_SEMAPHORES */
+
+  /* USER CODE BEGIN RTOS_TIMERS */
+  /* start timers, add new ones, ... */
+  /* USER CODE END RTOS_TIMERS */
+
+  /* USER CODE BEGIN RTOS_QUEUES */
+  /* add queues, ... */
+  /* USER CODE END RTOS_QUEUES */
+
+  /* Create the thread(s) */
+  /* creation of TaskDHT11 */
+  TaskDHT11Handle = osThreadNew(StartTaskDHT11, NULL, &TaskDHT11_attributes);
+
+  /* creation of Task02 */
+  Task02Handle = osThreadNew(StartTask2, NULL, &Task02_attributes);
+
+  /* USER CODE BEGIN RTOS_THREADS */
+  /* add threads, ... */
+  /* USER CODE END RTOS_THREADS */
+
+  /* USER CODE BEGIN RTOS_EVENTS */
+  /* add events, ... */
+  /* USER CODE END RTOS_EVENTS */
+
+  /* Start scheduler */
+  osKernelStart();
+
+  /* We should never get here as control is now taken by the scheduler */
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  if (DHT11_Start())
-	  	  	      {
-	  	  	          RHI = DHT11_Read(); // Relative humidity integral
-	  	  	          RHD = DHT11_Read(); // Relative humidity decimal
-	  	  	          TCI = DHT11_Read(); // Celsius integral
-	  	  	          TCD = DHT11_Read(); // Celsius decimal
-	  	  	          SUM = DHT11_Read(); // Check sum
-
-	  	  	          if (RHI + RHD + TCI + TCD == SUM)
-	  	  	          {
-	  	  	              // Convert readings to floating-point values
-	  	  	              tCelsius = (float)TCI + (float)(TCD / 10.0);
-	  	  	              tFahrenheit = tCelsius * 9 / 5 + 32;
-	  	  	              RH = (float)RHI + (float)(RHD / 10.0);
-	  	  	              // Can use tCelsius, tFahrenheit, and RH for any purposes
-	  	  	          }
-	  	  	      }
-	  	  	      HAL_Delay(2000);
-
-	  	  	      // Ensure the buffers are large enough to hold the formatted strings
-	  	  	      char temp[32];
-	  	  	      char humi[32];
-
-	  	  	      sprintf(temp, "Temp:%d\n", TCI);
-	  	  	      sprintf(humi, "Humi:%d\n", RHI);
-
-
-	  	  	      // Transmit the values over UART
-	  	  	      HAL_UART_Transmit(&huart2, (uint8_t*)temp, strlen(temp), 1000);
-	  	  	      HAL_UART_Transmit(&huart2, (uint8_t*)humi, strlen(humi), 1000);
-
-
-	  	  	    HAL_Delay(1000);
-
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -231,7 +192,12 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSI;
   RCC_OscInitStruct.HSIState = RCC_HSI_ON;
   RCC_OscInitStruct.HSICalibrationValue = RCC_HSICALIBRATION_DEFAULT;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSI;
+  RCC_OscInitStruct.PLL.PLLM = 8;
+  RCC_OscInitStruct.PLL.PLLN = 72;
+  RCC_OscInitStruct.PLL.PLLP = RCC_PLLP_DIV2;
+  RCC_OscInitStruct.PLL.PLLQ = 4;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
   {
     Error_Handler();
@@ -241,12 +207,12 @@ void SystemClock_Config(void)
   */
   RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
                               |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSI;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
   RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
   RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
 
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
   {
     Error_Handler();
   }
@@ -343,17 +309,34 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_RESET);
 
-  /*Configure GPIO pin : PA5 */
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5|GPIO_PIN_9, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin : PE5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : PA5 PA9 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_9;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PA8 */
+  GPIO_InitStruct.Pin = GPIO_PIN_8;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
@@ -363,6 +346,61 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 
 /* USER CODE END 4 */
+
+/* USER CODE BEGIN Header_StartTaskDHT11 */
+/**
+  * @brief  Function implementing the TaskDHT11 thread.
+  * @param  argument: Not used
+  * @retval None
+  */
+void StartTaskDHT11(void * argument)
+{
+  for(;;)
+  {
+    if (DHT11_Start())
+    {
+      RHI = DHT11_Read(); // Relative humidity integral
+      RHD = DHT11_Read(); // Relative humidity decimal
+      TCI = DHT11_Read(); // Celsius integral
+      TCD = DHT11_Read(); // Celsius decimal
+      SUM = DHT11_Read(); // Check sum
+
+      // Gửi dữ liệu qua UART
+      char temp[32];
+      char humi[32];
+
+      sprintf(temp, "Temp:%d\n", TCI);
+      sprintf(humi, "Humi:%d\n", RHI);
+      HAL_UART_Transmit(&huart2, (uint8_t*)temp, strlen(temp), 1000);
+      HAL_UART_Transmit(&huart2, (uint8_t*)humi, strlen(humi), 1000);
+    }
+    osDelay(2000);
+  }
+}
+/* USER CODE END Header_StartTaskDHT11 */
+
+
+/* USER CODE BEGIN Header_StartTask2 */
+/**
+* @brief Function implementing the Task02 thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTask2 */
+void StartTask2(void *argument)
+{
+  /* USER CODE BEGIN StartTask2 */
+  /* Infinite loop */
+	for (;;) {
+	    // Hiển thị thông tin "Hello World" qua UART
+	    char hello[] = "Hello World!\n";
+	    HAL_UART_Transmit(&huart2, (uint8_t*)hello, strlen(hello), 1000);
+
+	    // Delay để cho hiển thị có thời gian để hoàn thành
+	    osDelay(1000);
+	  }
+  /* USER CODE END StartTask2 */
+}
 
 /**
   * @brief  This function is executed in case of error occurrence.

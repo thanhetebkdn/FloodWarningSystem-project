@@ -1,0 +1,20 @@
+#include "dht11.h"
+
+uint8_t RHI, RHD, TCI, TCD, SUM;
+float tCelsius = 0;
+float tFahrenheit = 0;
+float RH = 0;
+uint32_t pMillis, cMillis;
+
+void microDelay(uint16_t delay) {
+  __HAL_TIM_SET_COUNTER(&htim1, 0);
+  while (__HAL_TIM_GET_COUNTER(&htim1) < delay);
+}
+
+uint8_t DHT11_Start(void) {
+  uint8_t Response = 0;
+  GPIO_InitTypeDef GPIO_InitStructPrivate = {0};
+  GPIO_InitStructPrivate.Pin = DHT11_PIN;
+  GPIO_InitStructPrivate.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStructPrivate.Speed = GPIO_SPEED_FREQ_LOW;
+
