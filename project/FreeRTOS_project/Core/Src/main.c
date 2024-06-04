@@ -29,24 +29,28 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-  uint8_t RHI, RHD, TCI, TCD, SUM;
-  uint8_t dataToSend[5];
+
 
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-
+#define TRIG_PIN GPIO_PIN_6
+#define TRIG_PORT GPIOD
+#define ECHO_PIN GPIO_PIN_5
+#define ECHO_PORT GPIOD
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define QUEUE_SIZE 10
- uint8_t QueueBuffer[QUEUE_SIZE * sizeof(uint32_t)];
+
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+
 TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
 
 UART_HandleTypeDef huart2;
 
@@ -57,16 +61,27 @@ const osThreadAttr_t TaskDHT11_attributes = {
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* Definitions for Task02 */
-osThreadId_t Task02Handle;
-const osThreadAttr_t Task02_attributes = {
-  .name = "Task02",
+/* Definitions for TaskHC */
+osThreadId_t TaskHCHandle;
+const osThreadAttr_t TaskHC_attributes = {
+  .name = "TaskHC",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+/* Definitions for TaskRainSensor */
+osThreadId_t TaskRainSensorHandle;
+const osThreadAttr_t TaskRainSensor_attributes = {
+  .name = "TaskRainSensor",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
 /* USER CODE BEGIN PV */
-
-/* HC-SR04 ---------------------------------------------------------*/
+uint8_t RHI, RHD, TCI, TCD, SUM;
+uint32_t pMillis;
+uint32_t Value1 = 0;
+uint32_t Value2 = 0;
+uint16_t Distance  = 0;
+uint16_t rainSensor =0;
 
 /* USER CODE END PV */
 
@@ -75,8 +90,11 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_TIM2_Init(void);
+static void MX_ADC1_Init(void);
 void StartTaskDHT11(void *argument);
-void StartTask2(void *argument);
+void StartTaskHC(void *argument);
+void StartTaskRainSensor(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -119,8 +137,12 @@ int main(void)
   MX_GPIO_Init();
   MX_TIM1_Init();
   MX_USART2_UART_Init();
+  MX_TIM2_Init();
+  MX_ADC1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim1);
+  HAL_ADC_Start(&hadc1);
+  HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_RESET);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -146,8 +168,11 @@ int main(void)
   /* creation of TaskDHT11 */
   TaskDHT11Handle = osThreadNew(StartTaskDHT11, NULL, &TaskDHT11_attributes);
 
-  /* creation of Task02 */
-  Task02Handle = osThreadNew(StartTask2, NULL, &Task02_attributes);
+  /* creation of TaskHC */
+  TaskHCHandle = osThreadNew(StartTaskHC, NULL, &TaskHC_attributes);
+
+  /* creation of TaskRainSensor */
+  TaskRainSensorHandle = osThreadNew(StartTaskRainSensor, NULL, &TaskRainSensor_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -165,6 +190,8 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -219,6 +246,58 @@ void SystemClock_Config(void)
 }
 
 /**
+  * @brief ADC1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_ADC1_Init(void)
+{
+
+  /* USER CODE BEGIN ADC1_Init 0 */
+
+  /* USER CODE END ADC1_Init 0 */
+
+  ADC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN ADC1_Init 1 */
+
+  /* USER CODE END ADC1_Init 1 */
+
+  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
+  */
+  hadc1.Instance = ADC1;
+  hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
+  hadc1.Init.Resolution = ADC_RESOLUTION_12B;
+  hadc1.Init.ScanConvMode = DISABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
+  hadc1.Init.DiscontinuousConvMode = DISABLE;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
+  hadc1.Init.NbrOfConversion = 1;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
+  hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
+  if (HAL_ADC_Init(&hadc1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
+  */
+  sConfig.Channel = ADC_CHANNEL_0;
+  sConfig.Rank = 1;
+  sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN ADC1_Init 2 */
+
+  /* USER CODE END ADC1_Init 2 */
+
+}
+
+/**
   * @brief TIM1 Initialization Function
   * @param None
   * @retval None
@@ -261,6 +340,51 @@ static void MX_TIM1_Init(void)
   /* USER CODE BEGIN TIM1_Init 2 */
 
   /* USER CODE END TIM1_Init 2 */
+
+}
+
+/**
+  * @brief TIM2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM2_Init(void)
+{
+
+  /* USER CODE BEGIN TIM2_Init 0 */
+
+  /* USER CODE END TIM2_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM2_Init 1 */
+
+  /* USER CODE END TIM2_Init 1 */
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 71;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 4294967295;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM2_Init 2 */
+
+  /* USER CODE END TIM2_Init 2 */
 
 }
 
@@ -312,12 +436,16 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOE, GPIO_PIN_5, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOA, GPIO_PIN_5|GPIO_PIN_9, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOD, GPIO_PIN_6, GPIO_PIN_RESET);
 
   /*Configure GPIO pin : PE5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
@@ -338,6 +466,25 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD5 */
+  GPIO_InitStruct.Pin = GPIO_PIN_5;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PD6 */
+  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PE1 */
+  GPIO_InitStruct.Pin = GPIO_PIN_1;
+  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
 /* USER CODE BEGIN MX_GPIO_Init_2 */
 /* USER CODE END MX_GPIO_Init_2 */
@@ -365,7 +512,6 @@ void StartTaskDHT11(void * argument)
       TCD = DHT11_Read(); // Celsius decimal
       SUM = DHT11_Read(); // Check sum
 
-      // Gửi dữ liệu qua UART
       char temp[32];
       char humi[32];
 
@@ -379,27 +525,61 @@ void StartTaskDHT11(void * argument)
 }
 /* USER CODE END Header_StartTaskDHT11 */
 
-
-/* USER CODE BEGIN Header_StartTask2 */
+/* USER CODE BEGIN Header_StartTaskHC */
 /**
-* @brief Function implementing the Task02 thread.
+* @brief Function implementing the TaskHC thread.
 * @param argument: Not used
 * @retval None
 */
-/* USER CODE END Header_StartTask2 */
-void StartTask2(void *argument)
+/* USER CODE END Header_StartTaskHC */
+void StartTaskHC(void *argument)
 {
-  /* USER CODE BEGIN StartTask2 */
+  /* USER CODE BEGIN StartTaskHC */
   /* Infinite loop */
-	for (;;) {
-	    // Hiển thị thông tin "Hello World" qua UART
-	    char hello[] = "Hello World!\n";
-	    HAL_UART_Transmit(&huart2, (uint8_t*)hello, strlen(hello), 1000);
+  for(;;)
+  {
+	  HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_SET);  // pull the TRIG pin HIGH
+	 __HAL_TIM_SET_COUNTER(&htim1, 0);
+	 while (__HAL_TIM_GET_COUNTER (&htim1) < 10);  // wait for 10 us
+	 HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_RESET);  // pull the TRIG pin low
 
-	    // Delay để cho hiển thị có thời gian để hoàn thành
-	    osDelay(1000);
-	  }
-  /* USER CODE END StartTask2 */
+	 pMillis = HAL_GetTick(); // used this to avoid infinite while loop  (for timeout)
+	 	  	      // wait for the echo pin to go high
+	 while (!(HAL_GPIO_ReadPin (ECHO_PORT, ECHO_PIN)) && pMillis + 10 >  HAL_GetTick());
+	 Value1 = __HAL_TIM_GET_COUNTER (&htim1);
+
+	 pMillis = HAL_GetTick(); // used this to avoid infinite while loop (for timeout)
+	 	  	      // wait for the echo pin to go low
+	 while ((HAL_GPIO_ReadPin (ECHO_PORT, ECHO_PIN)) && pMillis + 50 > HAL_GetTick());
+	 Value2 = __HAL_TIM_GET_COUNTER (&htim1);
+
+	 Distance = ((Value2-Value1)* 0.034)/2;
+	 osDelay(2000);
+	 char dis[32];
+	 sprintf(dis, "Distance:%d\n", Distance);
+	 HAL_UART_Transmit(&huart2, (uint8_t*)dis, strlen(dis), 1000);
+  }
+  /* USER CODE END StartTaskHC */
+}
+
+/* USER CODE BEGIN Header_StartTaskRainSensor */
+/**
+* @brief Function implementing the TaskRainSensor thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTaskRainSensor */
+void StartTaskRainSensor(void *argument)
+{
+  /* USER CODE BEGIN StartTaskRainSensor */
+  /* Infinite loop */
+  for(;;)
+  {
+	  HAL_ADC_Start(&hadc1);
+	  HAL_ADC_PollForConversion(&hadc1, 20);
+	  rainSensor = HAL_ADC_GetValue(&hadc1);
+  }
+  /* USER CODE END StartTaskRainSensor */
 }
 
 /**

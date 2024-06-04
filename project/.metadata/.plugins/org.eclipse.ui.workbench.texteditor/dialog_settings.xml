@@ -8,6 +8,9 @@
 		<item key="incremental" value="false"/>
 		<item key="isRegEx" value="false"/>
 		<list key="findhistory">
+			<item value="GPIO_PIN_1"/>
+			<item value=" HAL_TIM_IC_CaptureCallback"/>
+			<item value="GPIO_Init"/>
 			<item value="xQueueCreate"/>
 			<item value="osMessageQueueId_t "/>
 			<item value="StartTaskDHT11"/>
