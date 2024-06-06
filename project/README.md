@@ -54,9 +54,13 @@ FloodWarningSystem/
 │
 └── README.md # Project description file
 
-## Installation and Usage
+## Digram Project
 
-1. \*\* System Requirements
+<p align="center">
+  <img src="Diagram-FreeRTOS.png" alt="" width="800">
+</p>
+
+## Installation and Usage
 
 - STM32F4 Board
 - FreeRTOS
@@ -76,4 +80,4 @@ If you would like to contribute to the project, please fork the repository and s
 
 ## Contact
 
-If you have any questions or suggestions, please contact us via email: [tthanhete2gmail.com]
+If you have any questions or suggestions, please contact us via email: [tthanhetegmail.com]
