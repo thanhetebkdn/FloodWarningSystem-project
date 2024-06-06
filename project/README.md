@@ -68,12 +68,19 @@ FloodWarningSystem/
   <img src="Flow-Diagram.png" alt="" width="800">
 </p>
 
-## Installation and Usage
+## Embedded Requirements
 
 - STM32F4 Board
 - FreeRTOS
 - Sensors: DHT11, HC-SR04, RainSensor
 - Alarm Buzzer
+
+## Software Requirements
+
+- STM32CubeIDE: [STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html)
+- Hercules: [Hercules](https://www.hw-group.com/software/hercules-setup-utility)
+- Arduino IDE: [Arduino](https://www.arduino.cc/en/software)
+- MongoDB: [MongoDB](https://www.mongodb.com/try/download/community)
 
 ## Installation Instructions
 
@@ -81,13 +88,6 @@ FloodWarningSystem/
 2. Download and install FreeRTOS on the STM32F4 board.
 3. Download the project source code from the repository and upload it to the STM32F4 board.
 4. Run the system and check the operation of the sensors and alarm buzzer.
-
-## Software Requirements
-
-- STM32CubeIDE: [@STM32CubeIDE](https://www.st.com/en/development-tools/stm32cubeide.html)
-- Hercules: [@Hercules](https://www.hw-group.com/software/hercules-setup-utility)
-- Arduino IDE: [@Arduino](https://www.arduino.cc/en/software)
-- MongoDB: [@MongoDB](https://www.mongodb.com/try/download/community)
 
 ## Contribution
 
