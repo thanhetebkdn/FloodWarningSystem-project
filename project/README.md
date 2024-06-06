@@ -80,4 +80,4 @@ If you would like to contribute to the project, please fork the repository and s
 
 ## Contact
 
-If you have any questions or suggestions, please contact us via email: [tthanhetegmail.com]
+If you have any questions or suggestions, please contact us via email: [tthanhete@gmail.com]
