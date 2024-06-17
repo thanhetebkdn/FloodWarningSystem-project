@@ -25,6 +25,7 @@
 #include "dht11.h"
 #include <string.h>
 #include <stdio.h>
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +40,12 @@
 #define TRIG_PORT GPIOD
 #define ECHO_PIN GPIO_PIN_5
 #define ECHO_PORT GPIOD
+#define QUEUE_SIZE 5
+#define RAIN_SENSOR_QUEUE_SIZE 5
+#define HC_QUEUE_SIZE 5
+#define DHT11_QUEUE_SIZE 5
+#define LED_PIN GPIO_PIN_13
+#define LED_PORT GPIOD
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -66,12 +73,19 @@ osThreadId_t TaskHCHandle;
 const osThreadAttr_t TaskHC_attributes = {
   .name = "TaskHC",
   .stack_size = 128 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityHigh,
 };
 /* Definitions for TaskRainSensor */
 osThreadId_t TaskRainSensorHandle;
 const osThreadAttr_t TaskRainSensor_attributes = {
   .name = "TaskRainSensor",
+  .stack_size = 128 * 4,
+  .priority = (osPriority_t) osPriorityNormal1,
+};
+/* Definitions for TaskLED */
+osThreadId_t TaskLEDHandle;
+const osThreadAttr_t TaskLED_attributes = {
+  .name = "TaskLED",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
@@ -90,11 +104,12 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_TIM1_Init(void);
 static void MX_USART2_UART_Init(void);
-static void MX_TIM2_Init(void);
+//static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
 void StartTaskDHT11(void *argument);
 void StartTaskHC(void *argument);
 void StartTaskRainSensor(void *argument);
+void StartTaskLED(void *argument);
 
 /* USER CODE BEGIN PFP */
 
@@ -113,92 +128,29 @@ void StartTaskRainSensor(void *argument);
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_TIM1_Init();
   MX_USART2_UART_Init();
-  MX_TIM2_Init();
   MX_ADC1_Init();
-  /* USER CODE BEGIN 2 */
   HAL_TIM_Base_Start(&htim1);
   HAL_ADC_Start(&hadc1);
   HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_RESET);
-  /* USER CODE END 2 */
-
-  /* Init scheduler */
   osKernelInitialize();
 
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
-
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-  /* creation of TaskDHT11 */
   TaskDHT11Handle = osThreadNew(StartTaskDHT11, NULL, &TaskDHT11_attributes);
-
-  /* creation of TaskHC */
   TaskHCHandle = osThreadNew(StartTaskHC, NULL, &TaskHC_attributes);
-
-  /* creation of TaskRainSensor */
   TaskRainSensorHandle = osThreadNew(StartTaskRainSensor, NULL, &TaskRainSensor_attributes);
+  TaskLEDHandle = osThreadNew(StartTaskLED, NULL, &TaskLED_attributes);
 
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
-
-  /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
-  /* USER CODE END RTOS_EVENTS */
-
-  /* Start scheduler */
   osKernelStart();
 
-  /* We should never get here as control is now taken by the scheduler */
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
   while (1)
   {
 
-
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
   }
-  /* USER CODE END 3 */
 }
-
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -252,19 +204,8 @@ void SystemClock_Config(void)
   */
 static void MX_ADC1_Init(void)
 {
-
-  /* USER CODE BEGIN ADC1_Init 0 */
-
-  /* USER CODE END ADC1_Init 0 */
-
   ADC_ChannelConfTypeDef sConfig = {0};
 
-  /* USER CODE BEGIN ADC1_Init 1 */
-
-  /* USER CODE END ADC1_Init 1 */
-
-  /** Configure the global features of the ADC (Clock, Resolution, Data Alignment and number of conversion)
-  */
   hadc1.Instance = ADC1;
   hadc1.Init.ClockPrescaler = ADC_CLOCK_SYNC_PCLK_DIV2;
   hadc1.Init.Resolution = ADC_RESOLUTION_12B;
@@ -282,8 +223,6 @@ static void MX_ADC1_Init(void)
     Error_Handler();
   }
 
-  /** Configure for the selected ADC regular channel its corresponding rank in the sequencer and its sample time.
-  */
   sConfig.Channel = ADC_CHANNEL_0;
   sConfig.Rank = 1;
   sConfig.SamplingTime = ADC_SAMPLETIME_3CYCLES;
@@ -291,10 +230,6 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN ADC1_Init 2 */
-
-  /* USER CODE END ADC1_Init 2 */
-
 }
 
 /**
@@ -348,45 +283,45 @@ static void MX_TIM1_Init(void)
   * @param None
   * @retval None
   */
-static void MX_TIM2_Init(void)
-{
-
-  /* USER CODE BEGIN TIM2_Init 0 */
-
-  /* USER CODE END TIM2_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM2_Init 1 */
-
-  /* USER CODE END TIM2_Init 1 */
-  htim2.Instance = TIM2;
-  htim2.Init.Prescaler = 71;
-  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4294967295;
-  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM2_Init 2 */
-
-  /* USER CODE END TIM2_Init 2 */
-
-}
+//static void MX_TIM2_Init(void)
+//{
+//
+//  /* USER CODE BEGIN TIM2_Init 0 */
+//
+//  /* USER CODE END TIM2_Init 0 */
+//
+//  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+//  TIM_MasterConfigTypeDef sMasterConfig = {0};
+//
+//  /* USER CODE BEGIN TIM2_Init 1 */
+//
+//  /* USER CODE END TIM2_Init 1 */
+//  htim2.Instance = TIM2;
+//  htim2.Init.Prescaler = 71;
+//  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+//  htim2.Init.Period = 4294967295;
+//  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+//  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+//  if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+//  if (HAL_TIM_ConfigClockSource(&htim2, &sClockSourceConfig) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+//  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+//  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+//  {
+//    Error_Handler();
+//  }
+//  /* USER CODE BEGIN TIM2_Init 2 */
+//
+//  /* USER CODE END TIM2_Init 2 */
+//
+//}
 
 /**
   * @brief USART2 Initialization Function
@@ -447,6 +382,9 @@ static void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOD, GPIO_PIN_6, GPIO_PIN_RESET);
 
+  /*Configure GPIO pin Output Level */
+    HAL_GPIO_WritePin(GPIOD, GPIO_PIN_13, GPIO_PIN_RESET);
+
   /*Configure GPIO pin : PE5 */
   GPIO_InitStruct.Pin = GPIO_PIN_5;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
@@ -474,7 +412,7 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PD6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_6;
+  GPIO_InitStruct.Pin = GPIO_PIN_6 | GPIO_PIN_13;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -500,8 +438,12 @@ static void MX_GPIO_Init(void)
   * @param  argument: Not used
   * @retval None
   */
+
+osMessageQueueId_t DHT11QueueHandle;
+
 void StartTaskDHT11(void * argument)
 {
+	DHT11QueueHandle = osMessageQueueNew(DHT11_QUEUE_SIZE, sizeof(uint32_t[5]), NULL);
   for(;;)
   {
     if (DHT11_Start())
@@ -512,6 +454,9 @@ void StartTaskDHT11(void * argument)
       TCD = DHT11_Read(); // Celsius decimal
       SUM = DHT11_Read(); // Check sum
 
+      // Pack data into a single message
+
+
       char temp[32];
       char humi[32];
 
@@ -519,6 +464,7 @@ void StartTaskDHT11(void * argument)
       sprintf(humi, "Humi:%d\n", RHI);
       HAL_UART_Transmit(&huart2, (uint8_t*)temp, strlen(temp), 1000);
       HAL_UART_Transmit(&huart2, (uint8_t*)humi, strlen(humi), 1000);
+
     }
     osDelay(2000);
   }
@@ -532,34 +478,36 @@ void StartTaskDHT11(void * argument)
 * @retval None
 */
 /* USER CODE END Header_StartTaskHC */
+osMessageQueueId_t HCQueueHandle;
+
+
 void StartTaskHC(void *argument)
 {
-  /* USER CODE BEGIN StartTaskHC */
-  /* Infinite loop */
-  for(;;)
+  HCQueueHandle = osMessageQueueNew(HC_QUEUE_SIZE, sizeof(uint16_t), NULL);
+  for (;;)
   {
-	  HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_SET);  // pull the TRIG pin HIGH
-	 __HAL_TIM_SET_COUNTER(&htim1, 0);
-	 while (__HAL_TIM_GET_COUNTER (&htim1) < 10);  // wait for 10 us
-	 HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_RESET);  // pull the TRIG pin low
+    HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_SET);
+    __HAL_TIM_SET_COUNTER(&htim1, 0);
+    while (__HAL_TIM_GET_COUNTER(&htim1) < 10);
+    HAL_GPIO_WritePin(TRIG_PORT, TRIG_PIN, GPIO_PIN_RESET);
 
-	 pMillis = HAL_GetTick(); // used this to avoid infinite while loop  (for timeout)
-	 	  	      // wait for the echo pin to go high
-	 while (!(HAL_GPIO_ReadPin (ECHO_PORT, ECHO_PIN)) && pMillis + 10 >  HAL_GetTick());
-	 Value1 = __HAL_TIM_GET_COUNTER (&htim1);
+    pMillis = HAL_GetTick();
+    while (!(HAL_GPIO_ReadPin(ECHO_PORT, ECHO_PIN)) && pMillis + 10 > HAL_GetTick());
+    Value1 = __HAL_TIM_GET_COUNTER(&htim1);
 
-	 pMillis = HAL_GetTick(); // used this to avoid infinite while loop (for timeout)
-	 	  	      // wait for the echo pin to go low
-	 while ((HAL_GPIO_ReadPin (ECHO_PORT, ECHO_PIN)) && pMillis + 50 > HAL_GetTick());
-	 Value2 = __HAL_TIM_GET_COUNTER (&htim1);
+    pMillis = HAL_GetTick();
+    while ((HAL_GPIO_ReadPin(ECHO_PORT, ECHO_PIN)) && pMillis + 50 > HAL_GetTick());
+    Value2 = __HAL_TIM_GET_COUNTER(&htim1);
 
-	 Distance = ((Value2-Value1)* 0.034)/2;
-	 osDelay(2000);
-	 char dis[32];
-	 sprintf(dis, "Distance:%d\n", Distance);
-	 HAL_UART_Transmit(&huart2, (uint8_t*)dis, strlen(dis), 1000);
+    Distance = ((Value2 - Value1) * 0.034) / 2;
+    osMessageQueuePut(HCQueueHandle, &Distance, 0, 0);
+
+    char dis[32];
+    sprintf(dis, "Distance:%d\n", Distance);
+    HAL_UART_Transmit(&huart2, (uint8_t *)dis, strlen(dis), 1000);
+
+    osDelay(2000);
   }
-  /* USER CODE END StartTaskHC */
 }
 
 /* USER CODE BEGIN Header_StartTaskRainSensor */
@@ -569,17 +517,49 @@ void StartTaskHC(void *argument)
 * @retval None
 */
 /* USER CODE END Header_StartTaskRainSensor */
+
+osMessageQueueId_t RainSensorQueueHandle;
 void StartTaskRainSensor(void *argument)
 {
-  /* USER CODE BEGIN StartTaskRainSensor */
-  /* Infinite loop */
+	 RainSensorQueueHandle = osMessageQueueNew(RAIN_SENSOR_QUEUE_SIZE, sizeof(uint16_t), NULL);
   for(;;)
   {
-	  HAL_ADC_Start(&hadc1);
-	  HAL_ADC_PollForConversion(&hadc1, 20);
-	  rainSensor = HAL_ADC_GetValue(&hadc1);
+    HAL_ADC_Start(&hadc1);
+    HAL_ADC_PollForConversion(&hadc1, 20);
+    rainSensor = HAL_ADC_GetValue(&hadc1);
+
+    char rain[32];
+    sprintf(rain, "Rain:%d\n", rainSensor);
+    HAL_UART_Transmit(&huart2, (uint8_t*)rain, strlen(rain), 1000);
+
+    osMessageQueuePut(RainSensorQueueHandle, &rainSensor, 0, 0);
+
+    osDelay(2000);
   }
-  /* USER CODE END StartTaskRainSensor */
+}
+
+void StartTaskLED(void *argument)
+{
+  for (;;)
+  {
+    uint16_t distance;
+    if (osMessageQueueGet(HCQueueHandle, &distance, NULL, osWaitForever) == osOK)
+    {
+      if (distance < 10 || distance > 800)
+      {
+        HAL_GPIO_WritePin(LED_PORT, LED_PIN, GPIO_PIN_SET);
+
+        // Send distance over UART
+//        char msg[32];
+//        sprintf(msg, "FLOOD:\n");
+//        HAL_UART_Transmit(&huart2, (uint8_t*)msg, strlen(msg), 1000);
+      }
+      else
+      {
+        HAL_GPIO_WritePin(LED_PORT, LED_PIN, GPIO_PIN_RESET);
+      }
+    }
+  }
 }
 
 /**
