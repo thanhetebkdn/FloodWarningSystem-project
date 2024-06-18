@@ -235,6 +235,7 @@ portFORCE_INLINE static void vPortSetBASEPRI( uint32_t ulNewMaskValue )
 /*-----------------------------------------------------------*/
 
 #define portMEMORY_BARRIER() __asm volatile( "" ::: "memory" )
+
 #ifdef configASSERT
 
 void vSetVarulMaxPRIGROUPValue( void );
