@@ -60,12 +60,16 @@ FloodWarningSystem/
   <img src="Diagram-FreeRTOS.png" alt="" width="800">
 </p>
 
-## Schematic Diagram
-
 ## Flowchart Diagram
 
 <p align="center">
   <img src="Flow-Diagram.png" alt="" width="800">
+</p>
+
+## Analysis Segger SystemView
+
+<p align="center">
+  <img src="Analys-Segger.png" alt="" width="800">
 </p>
 
 ## Embedded Requirements
