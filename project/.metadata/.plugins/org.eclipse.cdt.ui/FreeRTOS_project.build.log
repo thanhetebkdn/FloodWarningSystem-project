@@ -1,10 +1,16 @@
-10:37:47 **** Incremental Build of configuration Debug for project FreeRTOS_project ****
+16:15:26 **** Build of configuration Debug for project FreeRTOS_project ****
 make -j8 all 
+arm-none-eabi-gcc -o "FreeRTOS_project.elf" @"objects.list"   -mcpu=cortex-m4 -T"D:\stm32f4x\project\FreeRTOS_project\STM32F407VGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="FreeRTOS_project.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+Finished building target: FreeRTOS_project.elf
+ 
 arm-none-eabi-size   FreeRTOS_project.elf 
+arm-none-eabi-objdump -h -S  FreeRTOS_project.elf  > "FreeRTOS_project.list"
    text	   data	    bss	    dec	    hex	filename
   34128	    104	  20936	  55168	   d780	FreeRTOS_project.elf
 Finished building: default.size.stdout
  
+Finished building: FreeRTOS_project.list
+ 
 
-10:37:47 Build Finished. 0 errors, 0 warnings. (took 422ms)
+16:15:27 Build Finished. 0 errors, 0 warnings. (took 855ms)
 
